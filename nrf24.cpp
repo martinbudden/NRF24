@@ -7,22 +7,6 @@ extern void CE_LO();
 extern void CE_HI();
 extern uint8_t nrf24TransferByte(uint8_t data);
 
-/*
- * This file is part of Cleanflight.
- *
- * Cleanflight is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Cleanflight is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Cleanflight.  If not, see <http://www.gnu.org/licenses/>.
- */
 
 // Instruction Mnemonics
 // nRF24L01:  Table 16. Command set for the nRF24L01 SPI. Product Specification, p46
@@ -43,19 +27,19 @@ enum {
     NOP           = 0xFF
 };
 
-// standby configuration: power up, 2 byte CRC
-#define NRF24_STANDBY_CONFIG (BV(NRF24_00_CONFIG_PWR_UP) | BV(NRF24_00_CONFIG_EN_CRC) | BV( NRF24_00_CONFIG_CRCO))
+// standby configuration, used to simplify switching between RX, TX, and Standby modes
+static uint8_t standbyConfig;
 
-void NRF24_Initialize(void)
+void NRF24_Initialize(uint8_t baseConfig)
 {
-    // power up into standby mode, 2 byte CRC
+    standbyConfig = BV(NRF24_00_CONFIG_PWR_UP) | baseConfig;
     CE_LO();
-    // Must allow the radio time to settle else configuration bits will not necessarily stick.
-    // This is actually only required following power up but some settling time also appears to
-    // be required after resets too.
+    // nRF24L01+ needs 1500 microseconds settling time from PowerOnReset to PowerDown mode, we conservatively use more
     delayMicroseconds(5000);
-    NRF24_WriteReg(NRF24_00_CONFIG, NRF24_STANDBY_CONFIG);
-    delayMicroseconds(5000);
+    // power up into standby mode
+    NRF24_WriteReg(NRF24_00_CONFIG, standbyConfig);
+    // nRF24L01+ needs 100 microseconds settling time from PowerDown mode to Standby mode
+    delayMicroseconds(120);
 }
 
 #if !defined(UNIT_TEST)
@@ -154,46 +138,34 @@ void NRF24_FlushTx(void)
 }
 #endif // defined UNIT_TEST
 
-uint8_t NRF24_Activate(uint8_t code)
-{
-    CSN_LO();
-    const uint8_t ret = nrf24TransferByte(ACTIVATE);
-    nrf24TransferByte(code);
-    CSN_HI();
-    return ret;
-}
-
 /*
- * Returns true if there is a packet available to be read in the nRF20L01 RX FIFO.
+ * Enter standby mode
  */
-bool NRF24_ReadAvailable(void)
-{
-    if (NRF24_ReadReg(NRF24_17_FIFO_STATUS) & BV(NRF24_17_FIFO_STATUS_RX_EMPTY)) {
-        return false;
-    } else {
-        return true;
-    }
-}
-
 void NRF24_SetStandbyMode(void)
 {
     // set CE low and clear the PRIM_RX bit to enter standby mode
     CE_LO();
-    NRF24_WriteReg(NRF24_00_CONFIG, NRF24_STANDBY_CONFIG);
+    NRF24_WriteReg(NRF24_00_CONFIG, standbyConfig);
 }
 
+/*
+ * Enter receive mode
+ */
 void NRF24_SetRxMode(void)
 {
     CE_LO(); // drop into standby mode
     // set the PRIM_RX bit
-    NRF24_WriteReg(NRF24_00_CONFIG, NRF24_STANDBY_CONFIG | BV(NRF24_00_CONFIG_PRIM_RX));
+    NRF24_WriteReg(NRF24_00_CONFIG, standbyConfig | BV(NRF24_00_CONFIG_PRIM_RX));
     NRF24_ClearAllInterrupts();
-    // finally set CE high to start listening
+    // finally set CE high to start enter RX mode
     CE_HI();
-    // may take up to 130 microseconds to enter RX mode
+    // nRF24L01+ needs 130 microseconds settling time from Standby mode to RX mode
     delayMicroseconds(130);
 }
 
+/*
+ * Enter transmit mode. Anything in the transmit FIFO will be transmitted.
+ */
 void NRF24_SetTxMode(void)
 {
     // Ensure in standby mode, since can only enter TX mode from standby mode
@@ -203,7 +175,7 @@ void NRF24_SetTxMode(void)
     CE_HI();
     delayMicroseconds(10);
     CE_LO();
-    // may take up to 130 microseconds to enter TX mode
+    // nRF24L01+ needs 130 microseconds settling time from Standby mode to TX mode
     delayMicroseconds(130);
 }
 
@@ -252,19 +224,32 @@ bool NRF24_IsRxFifoEmpty(void)
     return NRF24_ReadReg(NRF24_17_FIFO_STATUS) & BV(NRF24_17_FIFO_STATUS_RX_EMPTY);
 }
 
-/*
- * Reads the payloads in the FIFO, discarding all but the most recent.
- * Returns the total number of payloads read, zero if no payloads were available
- */
-uint8_t NRF24_ReadMostRecentPayload(uint8_t *data, uint8_t length)
+bool NRF24_ReadPayloadIfAvailable(uint8_t *data, uint8_t length)
 {
-    uint8_t payloadCount = 0;
-    if (NRF24_ReadReg(NRF24_07_STATUS) & BV(NRF24_07_STATUS_RX_DR)) {  // data ready
-        NRF24_WriteReg(NRF24_07_STATUS, NRF24_07_STATUS_RX_DR_TX_DS_MAX_RT); // clear interrupts
-        while (!(NRF24_ReadReg(NRF24_17_FIFO_STATUS) & BV(NRF24_17_FIFO_STATUS_RX_EMPTY))) {
-            NRF24_ReadPayload(data, length);
-            ++payloadCount;
-        }
+    if (NRF24_ReadReg(NRF24_17_FIFO_STATUS) & BV(NRF24_17_FIFO_STATUS_RX_EMPTY)) {
+        return false;
     }
-    return payloadCount;
+    NRF24_ReadPayload(data, length);
+    return true;
 }
+
+/*
+ * Basic initialization of NRF24, suitable for most protocols
+ */
+void NRF24_InitializeBasic(uint8_t rfChannel, const uint8_t *rxTxAddr, uint8_t payloadSize)
+{
+    NRF24_Initialize(BV(NRF24_00_CONFIG_EN_CRC) | BV( NRF24_00_CONFIG_CRCO));
+    NRF24_WriteReg(NRF24_02_EN_RXADDR, BV(NRF24_02_EN_RXADDR_ERX_P0));  // Enable data pipe 0 only
+    NRF24_WriteReg(NRF24_03_SETUP_AW, NRF24_03_SETUP_AW_5BYTES);   // 5-byte RX/TX address
+    NRF24_SetChannel(rfChannel);
+
+    NRF24_WriteReg(NRF24_06_RF_SETUP, NRF24_06_RF_SETUP_RF_DR_1Mbps | NRF24_06_RF_SETUP_RF_PWR_n12dbm);
+    NRF24_WriteRegisterMulti(NRF24_0A_RX_ADDR_P0, rxTxAddr, 5);
+    // RX_ADDR for pipes P2 to P5 are left at default values
+
+    NRF24_WriteReg(NRF24_08_OBSERVE_TX, 0x00);
+    NRF24_WriteReg(NRF24_1C_DYNPD, 0x00); // Disable dynamic payload length on all pipes
+
+    NRF24_WriteReg(NRF24_11_RX_PW_P0, payloadSize);
+}
+
