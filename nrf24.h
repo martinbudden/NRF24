@@ -125,6 +125,7 @@ bool NRF24L01_ReadPayloadIfAvailable(uint8_t *data, uint8_t length);
 void NRF24L01_InitializeBasic(uint8_t rfChannel, const uint8_t *rxTxAddr, uint8_t payloadSize);
 
 // XN297 emulation layer
+void XN297_SetRxTxAddr(const uint8_t* rXaddr, const uint8_t* tXaddr, int len);
 void XN297_SetTXAddr(const uint8_t* addr, int len);
 void XN297_SetRXAddr(const uint8_t* addr, int len);
 void XN297_Configure(uint8_t flags);

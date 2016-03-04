@@ -298,7 +298,7 @@ bool NRF24L01_Reset(void) {return true;}
 static int xn297_addrLen;
 static uint8_t  xn297_txAddr[5];
 static uint8_t  xn297_rxAddr[5];
-static uint8_t  xn297_crc = 0;
+static uint8_t  xn297_crc = 1;
 static const uint8_t xn297_scramble[] = {
   0xe3, 0xb1, 0x4b, 0xea, 0x85, 0xbc, 0xe5, 0x66,
   0x0d, 0xae, 0x8c, 0x88, 0x12, 0x69, 0xee, 0x1f,
@@ -323,8 +323,6 @@ static uint8_t bitReverse(uint8_t bIn)
     return bOut;
 }
 
-static const uint16_t crcInitial    = 0xb5d2;
-
 static uint16_t crc16_update(uint16_t crc, unsigned char a)
 {
     static const uint16_t crcPolynomial = 0x1021;
@@ -337,6 +335,13 @@ static uint16_t crc16_update(uint16_t crc, unsigned char a)
         }
     }
     return crc;
+}
+
+void XN297_SetRxTxAddr(const uint8_t* rXaddr, const uint8_t* tXaddr, int len)
+{
+    xn297_addrLen = len;
+    memcpy(xn297_rxAddr, rXaddr, len);
+    memcpy(xn297_txAddr, tXaddr, len);
 }
 
 void XN297_SetTXAddr(const uint8_t* addr, int len)
@@ -398,6 +403,7 @@ uint8_t XN297_WritePayload(uint8_t* data, int len)
         packet[last++] = bOut ^ xn297_scramble[xn297_addrLen+i];
     }
     if (xn297_crc) {
+        static const uint16_t crcInitial = 0xb5d2;
         int offset = xn297_addrLen < 4 ? 1 : 0;
         uint16_t crc = crcInitial;
         for (int i = offset; i < last; ++i) {
