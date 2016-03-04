@@ -6,6 +6,7 @@ extern void CSN_HI();
 extern void CE_LO();
 extern void CE_HI();
 extern uint8_t nrf24TransferByte(uint8_t data);
+#define UNUSED(x) (void)(x)
 
 
 // Instruction Mnemonics
@@ -30,21 +31,21 @@ enum {
 // standby configuration, used to simplify switching between RX, TX, and Standby modes
 static uint8_t standbyConfig;
 
-void NRF24_Initialize(uint8_t baseConfig)
+void NRF24L01_Initialize(uint8_t baseConfig)
 {
-    standbyConfig = BV(NRF24_00_CONFIG_PWR_UP) | baseConfig;
+    standbyConfig = BV(NRF24L01_00_CONFIG_PWR_UP) | baseConfig;
     CE_LO();
     // nRF24L01+ needs 1500 microseconds settling time from PowerOnReset to PowerDown mode, we conservatively use more
     delayMicroseconds(5000);
     // power up into standby mode
-    NRF24_WriteReg(NRF24_00_CONFIG, standbyConfig);
+    NRF24L01_WriteReg(NRF24L01_00_CONFIG, standbyConfig);
     // nRF24L01+ needs 100 microseconds settling time from PowerDown mode to Standby mode
     delayMicroseconds(120);
 }
 
 #if !defined(UNIT_TEST)
 
-uint8_t NRF24_WriteReg(uint8_t reg, uint8_t data)
+uint8_t NRF24L01_WriteReg(uint8_t reg, uint8_t data)
 {
     CSN_LO();
     const uint8_t ret = nrf24TransferByte(W_REGISTER | (REGISTER_MASK & reg));
@@ -53,7 +54,7 @@ uint8_t NRF24_WriteReg(uint8_t reg, uint8_t data)
     return ret;
 }
 
-uint8_t NRF24_WriteRegisterMulti(uint8_t reg, const uint8_t *data, uint8_t length)
+uint8_t NRF24L01_WriteRegisterMulti(uint8_t reg, const uint8_t *data, uint8_t length)
 {
     CSN_LO();
     const uint8_t ret = nrf24TransferByte(W_REGISTER | ( REGISTER_MASK & reg));
@@ -64,7 +65,7 @@ uint8_t NRF24_WriteRegisterMulti(uint8_t reg, const uint8_t *data, uint8_t lengt
     return ret;
 }
 
-uint8_t NRF24_ReadReg(uint8_t reg)
+uint8_t NRF24L01_ReadReg(uint8_t reg)
 {
     CSN_LO();
     nrf24TransferByte(R_REGISTER | (REGISTER_MASK & reg));
@@ -73,7 +74,7 @@ uint8_t NRF24_ReadReg(uint8_t reg)
     return data;
 }
 
-uint8_t NRF24_ReadRegisterMulti(uint8_t reg, uint8_t *data, uint8_t length)
+uint8_t NRF24L01_ReadRegisterMulti(uint8_t reg, uint8_t *data, uint8_t length)
 {
     CSN_LO();
     const uint8_t ret = nrf24TransferByte(R_REGISTER | (REGISTER_MASK & reg));
@@ -86,9 +87,9 @@ uint8_t NRF24_ReadRegisterMulti(uint8_t reg, uint8_t *data, uint8_t length)
 
 /*
  * Read a packet from the nRF24L01 RX FIFO.
- * Should call NRF24_IsRxFifoEmpty first to check availability.
+ * Should call NRF24L01_IsRxFifoEmpty first to check availability.
  */
-uint8_t NRF24_ReadPayload(uint8_t *data, uint8_t length)
+uint8_t NRF24L01_ReadPayload(uint8_t *data, uint8_t length)
 {
     CSN_LO();
     const uint8_t ret = nrf24TransferByte(R_RX_PAYLOAD);
@@ -104,7 +105,7 @@ uint8_t NRF24_ReadPayload(uint8_t *data, uint8_t length)
  * Packets in the TX FIFO are transmitted when the
  * nRF24L01 next enters TX mode
  */
-uint8_t NRF24_WritePayload(const uint8_t *data, uint8_t length)
+uint8_t NRF24L01_WritePayload(const uint8_t *data, uint8_t length)
 {
     CSN_LO();
     const uint8_t ret = nrf24TransferByte(W_TX_PAYLOAD);
@@ -118,7 +119,7 @@ uint8_t NRF24_WritePayload(const uint8_t *data, uint8_t length)
 /**
  * Empty the receive FIFO buffer.
  */
-void NRF24_FlushRx(void)
+void NRF24L01_FlushRx(void)
 {
     // this discards everything in the receive FIFO
     CSN_LO();
@@ -129,7 +130,7 @@ void NRF24_FlushRx(void)
 /**
  * Empty the transmit FIFO buffer. This is generally not required in standard operation.
  */
-void NRF24_FlushTx(void)
+void NRF24L01_FlushTx(void)
 {
     // this discards everything in the transmit FIFO
     CSN_LO();
@@ -141,22 +142,22 @@ void NRF24_FlushTx(void)
 /*
  * Enter standby mode
  */
-void NRF24_SetStandbyMode(void)
+void NRF24L01_SetStandbyMode(void)
 {
     // set CE low and clear the PRIM_RX bit to enter standby mode
     CE_LO();
-    NRF24_WriteReg(NRF24_00_CONFIG, standbyConfig);
+    NRF24L01_WriteReg(NRF24L01_00_CONFIG, standbyConfig);
 }
 
 /*
  * Enter receive mode
  */
-void NRF24_SetRxMode(void)
+void NRF24L01_SetRxMode(void)
 {
     CE_LO(); // drop into standby mode
     // set the PRIM_RX bit
-    NRF24_WriteReg(NRF24_00_CONFIG, standbyConfig | BV(NRF24_00_CONFIG_PRIM_RX));
-    NRF24_ClearAllInterrupts();
+    NRF24L01_WriteReg(NRF24L01_00_CONFIG, standbyConfig | BV(NRF24L01_00_CONFIG_PRIM_RX));
+    NRF24L01_ClearAllInterrupts();
     // finally set CE high to start enter RX mode
     CE_HI();
     // nRF24L01+ needs 130 microseconds settling time from Standby mode to RX mode
@@ -166,11 +167,11 @@ void NRF24_SetRxMode(void)
 /*
  * Enter transmit mode. Anything in the transmit FIFO will be transmitted.
  */
-void NRF24_SetTxMode(void)
+void NRF24L01_SetTxMode(void)
 {
     // Ensure in standby mode, since can only enter TX mode from standby mode
-    NRF24_SetStandbyMode();
-    NRF24_ClearAllInterrupts();
+    NRF24L01_SetStandbyMode();
+    NRF24L01_ClearAllInterrupts();
     // pulse CE for 10 microseconds to enter TX mode
     CE_HI();
     delayMicroseconds(10);
@@ -181,75 +182,251 @@ void NRF24_SetTxMode(void)
 
 /*
  * Sets the RX address.
- * User must have previously set address width using NRF24_03_SETUP_AW.
+ * User must have previously set address width using NRF24L01_03_SETUP_AW.
  */
-void NRF24_SetRxAddrP0(const uint8_t* addr, int len)
+void NRF24L01_SetRxAddrP0(const uint8_t* addr, int len)
 {
-    NRF24_WriteRegisterMulti(NRF24_0A_RX_ADDR_P0, addr, len);
+    NRF24L01_WriteRegisterMulti(NRF24L01_0A_RX_ADDR_P0, addr, len);
 }
 
 /*
  * Sets the TX address.
- * User must have previously set address width using NRF24_03_SETUP_AW.
+ * User must have previously set address width using NRF24L01_03_SETUP_AW.
  */
-void NRF24_SetTxAddr(const uint8_t *addr, int len)
+void NRF24L01_SetTxAddr(const uint8_t *addr, int len)
 {
-    NRF24_WriteRegisterMulti(NRF24_10_TX_ADDR, addr, len);
+    NRF24L01_WriteRegisterMulti(NRF24L01_10_TX_ADDR, addr, len);
 }
 
-void NRF24_SetChannel(uint8_t channel)
+void NRF24L01_SetChannel(uint8_t channel)
 {
-    NRF24_WriteReg(NRF24_05_RF_CH, channel);
+    NRF24L01_WriteReg(NRF24L01_05_RF_CH, channel);
 }
 
-void NRF24_ClearAllInterrupts(void)
+void NRF24L01_ClearAllInterrupts(void)
 {
     // Writing to the STATUS register clears the specified interrupt bits
-    NRF24_WriteReg(NRF24_07_STATUS, NRF24_07_STATUS_RX_DR_TX_DS_MAX_RT);
+    NRF24L01_WriteReg(NRF24L01_07_STATUS, NRF24L01_07_STATUS_RX_DR_TX_DS_MAX_RT);
 }
 
-void NRF24_ClearRxDataReadyInterrupt(void)
+void NRF24L01_ClearRxDataReadyInterrupt(void)
 {
     // Writing to the STATUS register clears the specified interrupt bits
-    NRF24_WriteReg(NRF24_07_STATUS, BV(NRF24_07_STATUS_RX_DR));
+    NRF24L01_WriteReg(NRF24L01_07_STATUS, BV(NRF24L01_07_STATUS_RX_DR));
 }
 
-bool NRF24_IsRxDataReady(void)
+bool NRF24L01_IsRxDataReady(void)
 {
-    return (NRF24_ReadReg(NRF24_07_STATUS) & BV(NRF24_07_STATUS_RX_DR));
+    return NRF24L01_ReadReg(NRF24L01_07_STATUS) & BV(NRF24L01_07_STATUS_RX_DR);
 }
 
-bool NRF24_IsRxFifoEmpty(void)
+bool NRF24L01_IsRxFifoEmpty(void)
 {
-    return NRF24_ReadReg(NRF24_17_FIFO_STATUS) & BV(NRF24_17_FIFO_STATUS_RX_EMPTY);
+    return NRF24L01_ReadReg(NRF24L01_17_FIFO_STATUS) & BV(NRF24L01_17_FIFO_STATUS_RX_EMPTY);
 }
 
-bool NRF24_ReadPayloadIfAvailable(uint8_t *data, uint8_t length)
+bool NRF24L01_ReadPayloadIfAvailable(uint8_t *data, uint8_t length)
 {
-    if (NRF24_ReadReg(NRF24_17_FIFO_STATUS) & BV(NRF24_17_FIFO_STATUS_RX_EMPTY)) {
+    if (NRF24L01_ReadReg(NRF24L01_17_FIFO_STATUS) & BV(NRF24L01_17_FIFO_STATUS_RX_EMPTY)) {
         return false;
     }
-    NRF24_ReadPayload(data, length);
+    NRF24L01_ReadPayload(data, length);
     return true;
 }
 
 /*
  * Basic initialization of NRF24, suitable for most protocols
  */
-void NRF24_InitializeBasic(uint8_t rfChannel, const uint8_t *rxTxAddr, uint8_t payloadSize)
+void NRF24L01_InitializeBasic(uint8_t rfChannel, const uint8_t *rxTxAddr, uint8_t payloadSize)
 {
-    NRF24_Initialize(BV(NRF24_00_CONFIG_EN_CRC) | BV( NRF24_00_CONFIG_CRCO));
-    NRF24_WriteReg(NRF24_02_EN_RXADDR, BV(NRF24_02_EN_RXADDR_ERX_P0));  // Enable data pipe 0 only
-    NRF24_WriteReg(NRF24_03_SETUP_AW, NRF24_03_SETUP_AW_5BYTES);   // 5-byte RX/TX address
-    NRF24_SetChannel(rfChannel);
+    NRF24L01_Initialize(BV(NRF24L01_00_CONFIG_EN_CRC) | BV( NRF24L01_00_CONFIG_CRCO));
+    NRF24L01_WriteReg(NRF24L01_02_EN_RXADDR, BV(NRF24L01_02_EN_RXADDR_ERX_P0));  // Enable data pipe 0 only
+    NRF24L01_WriteReg(NRF24L01_03_SETUP_AW, NRF24L01_03_SETUP_AW_5BYTES);   // 5-byte RX/TX address
+    NRF24L01_SetChannel(rfChannel);
 
-    NRF24_WriteReg(NRF24_06_RF_SETUP, NRF24_06_RF_SETUP_RF_DR_1Mbps | NRF24_06_RF_SETUP_RF_PWR_n12dbm);
-    NRF24_WriteRegisterMulti(NRF24_0A_RX_ADDR_P0, rxTxAddr, 5);
+    NRF24L01_WriteReg(NRF24L01_06_RF_SETUP, NRF24L01_06_RF_SETUP_RF_DR_1Mbps | NRF24L01_06_RF_SETUP_RF_PWR_n12dbm);
+    NRF24L01_WriteRegisterMulti(NRF24L01_0A_RX_ADDR_P0, rxTxAddr, 5);
     // RX_ADDR for pipes P2 to P5 are left at default values
 
-    NRF24_WriteReg(NRF24_08_OBSERVE_TX, 0x00);
-    NRF24_WriteReg(NRF24_1C_DYNPD, 0x00); // Disable dynamic payload length on all pipes
+    NRF24L01_WriteReg(NRF24L01_08_OBSERVE_TX, 0x00);
+    NRF24L01_WriteReg(NRF24L01_1C_DYNPD, 0x00); // Disable dynamic payload length on all pipes
 
-    NRF24_WriteReg(NRF24_11_RX_PW_P0, payloadSize);
+    NRF24L01_WriteReg(NRF24L01_11_RX_PW_P0, payloadSize);
 }
+
+
+// Temporarily included as part of merge with goebish
+void NRF24L01_SetTxRxMode(enum TXRX_State mode)
+{
+    if(mode == TX_EN) {
+        CE_LO();
+        NRF24L01_WriteReg(NRF24L01_07_STATUS, (1 << NRF24L01_07_RX_DR)    //reset the flag(s)
+                                            | (1 << NRF24L01_07_TX_DS)
+                                            | (1 << NRF24L01_07_MAX_RT));
+        NRF24L01_WriteReg(NRF24L01_00_CONFIG, (1 << NRF24L01_00_EN_CRC)   // switch to TX mode
+                                            | (1 << NRF24L01_00_CRCO)
+                                            | (1 << NRF24L01_00_PWR_UP));
+        delayMicroseconds(130);
+        CE_HI();
+    } else if (mode == RX_EN) {
+        CE_LO();
+        NRF24L01_WriteReg(NRF24L01_07_STATUS, 0x70);        // reset the flag(s)
+        NRF24L01_WriteReg(NRF24L01_00_CONFIG, 0x0F);        // switch to RX mode
+        NRF24L01_WriteReg(NRF24L01_07_STATUS, (1 << NRF24L01_07_RX_DR)    //reset the flag(s)
+                                            | (1 << NRF24L01_07_TX_DS)
+                                            | (1 << NRF24L01_07_MAX_RT));
+        NRF24L01_WriteReg(NRF24L01_00_CONFIG, (1 << NRF24L01_00_EN_CRC)   // switch to RX mode
+                                            | (1 << NRF24L01_00_CRCO)
+                                            | (1 << NRF24L01_00_PWR_UP)
+                                            | (1 << NRF24L01_00_PRIM_RX));
+        delayMicroseconds(130);
+        CE_HI();
+    } else {
+        NRF24L01_WriteReg(NRF24L01_00_CONFIG, (1 << NRF24L01_00_EN_CRC)); //PowerDown
+        CE_LO();
+    }
+}
+
+// Bitrate 0 - 1Mbps, 1 - 2Mbps, 3 - 250K (for nRF24L01+)
+uint8_t NRF24L01_SetBitrate(uint8_t bitrate) {UNUSED(bitrate);return 0;}
+void NRF24L01_SpiInit(void) {}
+uint8_t NRF24L01_SetPower(uint8_t power) {UNUSED(power);return 0;}
+bool NRF24L01_Reset(void) {return true;}
+
+// XN297 emulation layer
+
+static int xn297_addrLen;
+static uint8_t  xn297_txAddr[5];
+static uint8_t  xn297_rxAddr[5];
+static uint8_t  xn297_crc = 0;
+static const uint8_t xn297_scramble[] = {
+  0xe3, 0xb1, 0x4b, 0xea, 0x85, 0xbc, 0xe5, 0x66,
+  0x0d, 0xae, 0x8c, 0x88, 0x12, 0x69, 0xee, 0x1f,
+  0xc7, 0x62, 0x97, 0xd5, 0x0b, 0x79, 0xca, 0xcc,
+  0x1b, 0x5d, 0x19, 0x10, 0x24, 0xd3, 0xdc, 0x3f,
+  0x8e, 0xc5, 0x2f};
+
+static const uint16_t xn297_crcXorout[] = {
+    0x0000, 0x3448, 0x9BA7, 0x8BBB, 0x85E1, 0x3E8C, // 1st entry is missing, probably never needed
+    0x451E, 0x18E6, 0x6B24, 0xE7AB, 0x3828, 0x8148, // it's used for 3-byte address w/ 0 byte payload only
+    0xD461, 0xF494, 0x2503, 0x691D, 0xFE8B, 0x9BA7,
+    0x8B17, 0x2920, 0x8B5F, 0x61B1, 0xD391, 0x7401,
+    0x2138, 0x129F, 0xB3A0, 0x2988};
+
+static uint8_t bitReverse(uint8_t bIn)
+{
+    uint8_t bOut = 0;
+    for (int i = 0; i < 8; ++i) {
+        bOut = (bOut << 1) | (bIn & 1);
+        bIn >>= 1;
+    }
+    return bOut;
+}
+
+static const uint16_t crcInitial    = 0xb5d2;
+
+static uint16_t crc16_update(uint16_t crc, unsigned char a)
+{
+    static const uint16_t crcPolynomial = 0x1021;
+    crc ^= a << 8;
+    for (int i = 0; i < 8; ++i) {
+        if (crc & 0x8000) {
+            crc = (crc << 1) ^ crcPolynomial;
+        } else {
+            crc = crc << 1;
+        }
+    }
+    return crc;
+}
+
+void XN297_SetTXAddr(const uint8_t* addr, int len)
+{
+    uint8_t buf[5] = { 0x55, 0x0F, 0x71, 0x0C, 0x00 }; // bytes for XN297 preamble 0xC710F55 (28 bit)
+    xn297_addrLen = len;
+    if (xn297_addrLen < 4) {
+        for (int i = 0; i < 4; ++i) {
+            buf[i] = buf[i+1];
+        }
+    }
+    NRF24L01_WriteReg(NRF24L01_03_SETUP_AW, len-2);
+    NRF24L01_WriteRegisterMulti(NRF24L01_10_TX_ADDR, buf, 5);
+    // Receive address is complicated. We need to use scrambled actual address as a receive address
+    // but the TX code now assumes fixed 4-byte transmit address for preamble. We need to adjust it
+    // first. Also, if the scrambled address begins with 1 nRF24 will look for preamble byte 0xAA
+    // instead of 0x55 to ensure enough 0-1 transitions to tune the receiver. Still need to experiment
+    // with receiving signals.
+    memcpy(xn297_txAddr, addr, len);
+}
+
+void XN297_SetRXAddr(const uint8_t* addr, int len)
+{
+    uint8_t buf[5];
+    memcpy(buf, addr, len);
+    memcpy(xn297_rxAddr, addr, len);
+    for (int i = 0; i < xn297_addrLen; ++i) {
+        buf[i] = xn297_rxAddr[i] ^ xn297_scramble[xn297_addrLen-i-1];
+    }
+    NRF24L01_WriteReg(NRF24L01_03_SETUP_AW, len-2);
+    NRF24L01_WriteRegisterMulti(NRF24L01_0A_RX_ADDR_P0, buf, 5);
+}
+
+void XN297_Configure(uint8_t flags)
+{
+    xn297_crc = !!(flags & BV(NRF24L01_00_CONFIG_EN_CRC));
+    flags &= ~(BV(NRF24L01_00_CONFIG_EN_CRC) | BV(NRF24L01_00_CONFIG_CRCO));
+    NRF24L01_WriteReg(NRF24L01_00_CONFIG, flags);
+}
+
+uint8_t XN297_WritePayload(uint8_t* data, int len)
+{
+    uint8_t packet[32];
+    uint8_t res;
+    int last = 0;
+    if (xn297_addrLen < 4) {
+        // If address length (which is defined by receive address length)
+        // is less than 4 the TX address can't fit the preamble, so the last
+        // byte goes here
+        packet[last++] = 0x55;
+    }
+    for (int i = 0; i < xn297_addrLen; ++i) {
+        packet[last++] = xn297_txAddr[xn297_addrLen-i-1] ^ xn297_scramble[i];
+    }
+
+    for (int i = 0; i < len; ++i) {
+        // bit-reverse bytes in packet
+        uint8_t bOut = bitReverse(data[i]);
+        packet[last++] = bOut ^ xn297_scramble[xn297_addrLen+i];
+    }
+    if (xn297_crc) {
+        int offset = xn297_addrLen < 4 ? 1 : 0;
+        uint16_t crc = crcInitial;
+        for (int i = offset; i < last; ++i) {
+            crc = crc16_update(crc, packet[i]);
+        }
+        crc ^= xn297_crcXorout[xn297_addrLen - 3 + len];
+        packet[last++] = crc >> 8;
+        packet[last++] = crc & 0xff;
+    }
+    res = NRF24L01_WritePayload(packet, last);
+    return res;
+}
+
+uint8_t XN297_ReadPayload(uint8_t* data, int len)
+{
+    // TODO: if xn297_crc==1, check CRC before filling *data
+    uint8_t res = NRF24L01_ReadPayload(data, len);
+    for(uint8_t i=0; i<len; i++) {
+        data[i] = bitReverse(data[i]) ^ bitReverse(xn297_scramble[i+xn297_addrLen]);
+    }
+    return res;
+}
+
+void XN297_UnscramblePayload(uint8_t* data, int len)
+{
+    for(uint8_t i = 0; i < len; i++) {
+        data[i] = bitReverse(data[i]) ^ bitReverse(xn297_scramble[i+xn297_addrLen]);
+    }
+}
+
+// End of XN297 emulation
 
