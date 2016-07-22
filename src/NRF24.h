@@ -1,3 +1,22 @@
+/*
+ * This file is part of the Arduino NRF24 library.
+ *
+ * Written by Martin Budden
+ *
+ * This library is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License, <http://www.gnu.org/licenses/>, for
+ * more details.
+ *
+ * All the above text and this condition must be included in any redistribution.
+ */
+
 #pragma once
 
 #include <stdbool.h>
@@ -63,7 +82,7 @@ enum {
     NRF24L01_07_STATUS_TX_DS            = 5,
     NRF24L01_07_STATUS_MAX_RT           = 4,
 
-    NRF24L01_17_FIFO_STATUS_FX_FULL     = 5,
+    NRF24L01_17_FIFO_STATUS_TX_FULL     = 5,
     NRF24L01_17_FIFO_STATUS_TX_EMPTY    = 4,
     NRF24L01_17_FIFO_STATUS_RX_FULL     = 1,
     NRF24L01_17_FIFO_STATUS_RX_EMPTY    = 0,
@@ -88,39 +107,49 @@ enum {
     NRF24L01_06_RF_SETUP_RF_DR_2Mbps    = 0x08,
     NRF24L01_06_RF_SETUP_RF_DR_1Mbps    = 0x00,
     NRF24L01_06_RF_SETUP_RF_DR_250Kbps  = 0x20,
+    NRF24L01_06_RF_SETUP_RF_DR_MASK     = 0x28,
     NRF24L01_06_RF_SETUP_RF_PWR_n18dbm  = 0x01,
     NRF24L01_06_RF_SETUP_RF_PWR_n12dbm  = 0x02,
     NRF24L01_06_RF_SETUP_RF_PWR_n6dbm   = 0x04,
     NRF24L01_06_RF_SETUP_RF_PWR_0dbm    = 0x06,
-
-    NRF24L01_07_STATUS_RX_DR_TX_DS_MAX_RT = BV(NRF24L01_07_STATUS_RX_DR) | BV(NRF24L01_07_STATUS_TX_DS) | BV(NRF24L01_07_STATUS_MAX_RT),
+    NRF24L01_06_RF_SETUP_RF_PWR_MASK    = 0x07,
 
     NRF24L01_1C_DYNPD_ALL_PIPES         = 0x3F,
 };
 
-void NRF24L01_Initialize(uint8_t baseConfig);
-uint8_t NRF24L01_WriteReg(uint8_t reg, uint8_t data);
-uint8_t NRF24L01_WriteRegisterMulti(uint8_t reg, const uint8_t *data, uint8_t length);
-uint8_t NRF24L01_WritePayload(const uint8_t *data, uint8_t len);
-uint8_t NRF24L01_ReadReg(uint8_t reg);
-uint8_t NRF24L01_ReadRegisterMulti(uint8_t reg, uint8_t *data, uint8_t length);
-uint8_t NRF24L01_ReadPayload(uint8_t *data, uint8_t len);
+class NRF24L01 {
+private:
+    uint8_t ce_pin; // Chip Enable
+    uint8_t csn_pin; // Chip Select
+    uint8_t standbyConfig; // standby 00_CONFIG value, used to simplify switching between RX, TX, and Standby modes
+    uint8_t rfDataRate; // 06_RF_SETUP data rate value, used to simplify changing power output
+private:
+    void ENABLE_NRF24(void);
+    void DISABLE_NRF24(void);
+    void NRF24_CE_LO(void);
+    void NRF24_CE_HI(void);
+    uint8_t spiTransferByte(uint8_t data);
+public:
+    NRF24L01(uint8_t _ce_pin, uint8_t _csn_pin);
+    void initialize(uint8_t baseConfig, uint8_t rfDataRate);
+    uint8_t writeReg(uint8_t reg, uint8_t data);
+    uint8_t writeRegisterMulti(uint8_t reg, const uint8_t *data, uint8_t length);
+    uint8_t writePayload(const uint8_t *data, uint8_t len);
+    uint8_t readReg(uint8_t reg);
+    uint8_t readRegisterMulti(uint8_t reg, uint8_t *data, uint8_t length);
+    uint8_t readPayload(uint8_t *data, uint8_t len);
 
-void NRF24L01_FlushRx(void);
-void NRF24L01_FlushTx(void);
-
-void NRF24L01_SetStandbyMode(void);
-void NRF24L01_SetRxMode(void);
-void NRF24L01_SetTxMode(void);
+    void flushTx(void);
+    void flushRx(void);
 
 // Utility functions
-void NRF24L01_SetRxAddrP0(const uint8_t *addr, int len);
-void NRF24L01_SetTxAddr(const uint8_t *addr, int len);
-void NRF24L01_SetChannel(uint8_t channel);
-void NRF24L01_ClearRxDataReadyInterrupt(void);
-void NRF24L01_ClearAllInterrupts(void);
-bool NRF24L01_IsRxDataReady(void);
-bool NRF24L01_IsRxFifoEmpty(void);
-bool NRF24L01_ReadPayloadIfAvailable(uint8_t *data, uint8_t length);
-void NRF24L01_InitializeBasic(uint8_t rfChannel, const uint8_t *rxTxAddr, uint8_t payloadSize);
+    void setStandbyMode(void);
+    void setRxMode(void);
+    void setTxMode(void);
+    void clearAllInterrupts(void);
+    void setChannel(uint8_t channel);
+    uint8_t getChannel(void);
+    void setRfPower(uint8_t rfPower);
+    bool readPayloadIfAvailable(uint8_t *data, uint8_t length);
+};
 
