@@ -63,6 +63,17 @@ void NRF24L01::initialize(uint8_t baseConfig, uint8_t _rfDataRate)
     writeReg(NRF24L01_06_RF_SETUP, rfDataRate);
 }
 
+void NRF24L01::initializeNoAutoAcknowledgement(uint8_t baseConfig, uint8_t rfDataRate)
+{
+    initialize(baseConfig, rfDataRate);
+    // standard setup for protocols with no auto acknowledgment
+    writeReg(NRF24L01_01_EN_AA, 0); // No auto acknowledgment
+    writeReg(NRF24L01_02_EN_RXADDR, BV(NRF24L01_02_EN_RXADDR_ERX_P0));
+    writeReg(NRF24L01_03_SETUP_AW, NRF24L01_03_SETUP_AW_5BYTES);   // 5-byte RX/TX address
+    writeReg(NRF24L01_04_SETUP_RETR, 0); // Auto retransmit disabled
+    writeReg(NRF24L01_1C_DYNPD, 0); // Disable dynamic payload length on all pipes
+}
+
 void NRF24L01::ENABLE_NRF24(void)
 {
     digitalWrite(csn_pin, LOW);
@@ -126,6 +137,25 @@ uint8_t NRF24L01::writePayload(const uint8_t *data, uint8_t length)
     return ret;
 }
 
+uint8_t NRF24L01::writeAckPayload(const uint8_t *data, uint8_t length, uint8_t pipe)
+{
+    ENABLE_NRF24();
+    const uint8_t ret = spiTransferByte(W_ACK_PAYLOAD | pipe);
+    for (int ii = 0; ii < length; ++ii) {
+        spiTransferByte(data[ii]);
+    }
+    DISABLE_NRF24();
+    return ret;
+}
+
+uint8_t NRF24L01::readStatus(void)
+{
+    ENABLE_NRF24();
+    const uint8_t ret = spiTransferByte(NOP);
+    DISABLE_NRF24();
+    return ret;
+}
+
 uint8_t NRF24L01::readReg(uint8_t reg)
 {
     ENABLE_NRF24();
@@ -156,6 +186,15 @@ uint8_t NRF24L01::readPayload(uint8_t *data, uint8_t length)
     for (int ii = 0; ii < length; ++ii) {
         data[ii] = spiTransferByte(NOP);
     }
+    DISABLE_NRF24();
+    return ret;
+}
+
+uint8_t NRF24L01::getDynamicPayloadSize(void)
+{
+    ENABLE_NRF24();
+    spiTransferByte(R_RX_PL_WID);
+    const uint8_t ret = spiTransferByte(NOP);
     DISABLE_NRF24();
     return ret;
 }
@@ -248,5 +287,20 @@ bool NRF24L01::readPayloadIfAvailable(uint8_t *data, uint8_t length)
     }
     readPayload(data, length);
     return true;
+}
+
+uint8_t NRF24L01::readDynamicPayloadIfAvailable(uint8_t *data)
+{
+    if (readReg(NRF24L01_17_FIFO_STATUS) & BV(NRF24L01_17_FIFO_STATUS_RX_EMPTY)) {
+        return 0;
+    }
+    const uint8_t length = getDynamicPayloadSize();
+    if (length > NRF24L01_MAX_PAYLOAD_SIZE) {
+        // packet contains errors and must be discarded
+        flushRx();
+        return 0;
+    }
+    readPayload(data, length);
+    return length;
 }
 
